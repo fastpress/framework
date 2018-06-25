@@ -1,0 +1,39 @@
+{
+  "name": "fastpress/framework",
+  "description": "core framework of fastpress framework",
+  "keywords": [
+      "PHP",
+      "fast",
+      "micro",
+      "framework",
+      "microframework"
+  ],
+    "homepage": "https://github.com/fastpress/framework",
+    "license": "MIT", 
+    "authors": [
+        {
+        "name": "Simon Daniel",
+        "role": "Creator / Developer"
+        }
+    ],
+    "require": {
+        "php": "^7.0"
+    },
+    "suggest":{
+        "fastpress/fastpress": "A fast PHP blogging app made with fastpress/framework"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^6.0"
+    },
+    "autoload":{
+       "psr-4":{
+          "Fastpress\\":"src"
+       }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Fastpress\\": "src/",
+            "Fastpress\\Framework\\Test\\": "test/"
+        }
+    }
+}
