@@ -1,0 +1,37 @@
+{
+  "name": "fastpress/framework",
+  "description": "fastpress/framework core",
+  "keywords": [
+    "PHP",
+    "fast",
+    "micro",
+    "framework",
+    "microframework"
+  ],
+  "homepage": "https://github.com/fastpress/framework",
+  "license": "MIT", 
+  "authors": [{
+      "name": "samayo",
+      "role": "dev"
+    }],
+  "require": {
+    "php": "^7.0"
+  },
+  "suggest":{
+    "fastpress/fastpress": "A fast PHP blogging app made for fastpress/fastpress"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^6.0"
+  },
+  "autoload":{
+   "psr-4":{
+      "Fastpress\\":"src"
+   }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Fastpress\\": "src/",
+      "Fastpress\\Framework\\Test\\": "test/"
+    }
+  }
+}
