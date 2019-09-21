@@ -205,10 +205,6 @@ class Application implements \ArrayAccess
     {
         $input = $this['request']->requestGlobals();
         $resource = $this['route']->match($input['server'], $input['post']);
-           
-        if(!$resource) {
-          header('location: /');
-        }
         
         if (is_array($resource) && !empty($resource)) {
             $dispatch = $this->controllerDipatcher($resource);
