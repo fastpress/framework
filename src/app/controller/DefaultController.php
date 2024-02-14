@@ -2,10 +2,13 @@
 
 namespace App\Controller;
 
+use Fastpress\View\View;
+
 class DefaultController {
 
-    public function index() {
-        echo 'Welcome to fastpress';
+    public function index(View $view) {
+
+        $view->render('index.html');
     }
 
 

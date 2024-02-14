@@ -42,8 +42,8 @@ $conf['namespaces'] = [
 
 // path to views and layouts
 $conf['template'] = [
-   'views'  => __DIR__ . '/app/views/',
-   'layout' => __DIR__ . '/app/views/layout/'
+   'views'  => __DIR__ . '/view/',
+   'layout' => __DIR__ . '/view/layout/'
 ];
 
 // path to your assets
@@ -143,9 +143,8 @@ $conf['database'] = [
  ];
 
 
-// Set error reporting for production
-error_reporting(0);
-ini_set('display_errors', '0');
-ini_set('log_errors', '1');
-ini_set('error_log', __DIR__ . '/path/to/your/error.log');
+// Report all PHP errors
+error_reporting(E_ALL);
 
+// Set the display_errors directive to 'On' in php.ini to display errors
+ini_set('display_errors', '1');

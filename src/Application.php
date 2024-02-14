@@ -10,7 +10,6 @@ class Application implements \ArrayAccess
     public function __construct(array $config)
     {
         $this->config = $config;
-
         if (!empty($this->config['services']) && is_array($this->config['services'])) {
             foreach ($this->config['services'] as $name => $resolver) {
                 $this->register($name, $resolver);
@@ -175,12 +174,11 @@ class Application implements \ArrayAccess
         }
 
         $parts = explode('\\', $className);
-        $shotClassName = strtolower(end($parts));
+        $shortClassName = strtolower(end($parts));
 
-        if (isset($this->config['services'][$shotClassName])) {
-            return $this->config['services'][$shotClassName]($this);
+        if (isset($this->config['services'][$shortClassName])) {
+            return $this->config['services'][$shortClassName]($this);
         }
-
         $reflection = new \ReflectionClass($className);
         $constructor = $reflection->getConstructor();
 
