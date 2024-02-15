@@ -2,7 +2,7 @@
 
 namespace App\Controller;
 
-use Fastpress\View\View;
+use Fastpress\Presentation\View;
 
 class DefaultController {
 
