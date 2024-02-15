@@ -157,7 +157,7 @@ class Application implements \ArrayAccess
             $paramName = $param->getName();
 
             if ($paramName === 'view') {
-                $args[] = new \Fastpress\View\View($this);
+                $args[] = new \Fastpress\Presentation\View($this);
                 continue;
             } else {
                 $args[] = $this->container['services'][$paramName]();
