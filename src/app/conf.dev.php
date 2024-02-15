@@ -90,7 +90,7 @@ $conf['services'] = [
         return new Fastpress\Security\Session($_SESSION, $conf['session']);
     },
     'view' => function() use ($conf) {
-       return new Fastpress\View\View($conf);
+       return new Fastpress\Presentation\View($conf);
     },
  
     'pdo' => function() use ($conf) {

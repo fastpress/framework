@@ -4,11 +4,11 @@
     "type": "library",
     "require": {
         "php": "^7.4 || ^8.0",
-        "fastpress/request": "dev-main",
-        "fastpress/response": "dev-main",
-        "fastpress/router": "dev-main",
-        "fastpress/session": "dev-main",
-        "fastpress/view": "dev-main"
+        "fastpress/request": "0.1.0",
+        "fastpress/response": "0.1.0",
+        "fastpress/router": "0.1.0",
+        "fastpress/session": "0.1.0",
+        "fastpress/view": "0.1.0"
     },
     "scripts": {
         "test": "phpunit",
