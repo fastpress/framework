@@ -3,7 +3,7 @@
 namespace App\Controller;
 
 use Fastpress\Presentation\View;
-use Fastpress\Service\DefaultService;
+use App\Service\DefaultService;
 
 class DefaultController {
     private $defaultService;
