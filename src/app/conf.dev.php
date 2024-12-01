@@ -54,6 +54,23 @@ $conf['assets'] = [
    'img'  => $conf['host'] . '/assets/img',
 ];
 
+// Database configuration
+$conf['database'] = [
+   // Default database configuration
+   'mysql' => [
+       'driver' => 'mysql',
+       'host' => 'localhost',
+       'port' => 3306, // Default MySQL port. Change it according to the database system.
+       'username' => 'root',
+       'password' => '',
+       'database' => 'your-database-name',
+       'charset' => 'utf8',
+       'collation' => 'utf8_unicode_ci',
+       'prefix' => '', // Table prefix if any
+       // Add any other database-specific parameters here
+   ],
+];
+
 // session security configurations for production
 // session security configs
 $conf['session'] = [
@@ -95,6 +112,11 @@ $conf['services'] = [
           $container->resolve('session')
       );
   },
+   'database' => function($conf) {
+      return new Fastpress\Memory\Database(
+         $conf['database']['mysql'],
+      );
+   }
 ];
 
 // Define other configurations such as cache settings, blocks, use flags, etc.
@@ -115,22 +137,7 @@ $conf['use'] = [
 ];
 
 
-// Database configuration
-$conf['database'] = [
-    // Default database configuration
-    'mysql' => [
-        'driver' => 'mysql',
-        'host' => 'localhost',
-        'port' => 3306, // Default MySQL port. Change it according to the database system.
-        'username' => 'root',
-        'password' => '',
-        'database' => 'your-database-name',
-        'charset' => 'utf8',
-        'collation' => 'utf8_unicode_ci',
-        'prefix' => '', // Table prefix if any
-        // Add any other database-specific parameters here
-    ],
- ];
+
 
 
 // Report all PHP errors
