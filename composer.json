@@ -2,13 +2,15 @@
     "name": "fastpress/framework",
     "description": "A comprehensive framework encompassing all essential components for building web applications with Fastpress.",
     "type": "library",
+    "version": "0.1.4",
     "require": {
         "php": "^7.4 || ^8.0",
-        "fastpress/request": "^0.1.0",
-        "fastpress/response": "^0.1.0",
-        "fastpress/router": "^0.1.0",
-        "fastpress/session": "^0.1.0",
-        "fastpress/view": "^0.1.0"
+        "fastpress/request": "0.1.*",
+        "fastpress/response": "0.1.*",
+        "fastpress/router": "0.1.*",
+        "fastpress/session": "0.1.*",
+        "fastpress/view": "0.1.*",
+        "fastpress/database": "0.1.*"
     },
     "scripts": {
         "test": "phpunit",
@@ -26,17 +28,21 @@
             "Fastpress\\": "src/",
             "App\\Controller\\": "src/app/controller/",
             "App\\Service\\": "src/app/service/",
-            "App\\Model\\": "src/app/model/"
+            "App\\Repository\\": "src/app/repository/"
         }
     },
     "license": "MIT",
     "authors": [
         {
-            "name": "Your Name",
-            "email": "your.email@example.com"
+            "name": "samayo",
+            "email": "samayo@pm.me"
         }
     ],
-    "keywords": ["framework", "fastpress", "web application"],
+    "keywords": [
+        "framework",
+        "fastpress",
+        "web application"
+    ],
     "homepage": "https://github.com/fastpress/framework",
     "support": {
         "issues": "https://github.com/fastpress/framework/issues",
@@ -45,12 +51,12 @@
     "config": {
         "optimize-autoloader": true,
         "platform": {
-            "php": "7.4"
+            "php": "7.4" 
         }
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.3.x-dev"
+            "dev-main": "0.3.x-dev" 
         }
     }
 }

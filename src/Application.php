@@ -1,223 +1,462 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Fastpress;
 
+use RuntimeException;
+use Closure;
+use ReflectionClass;
+use ReflectionMethod;
+use ReflectionParameter;
+
+/**
+ * The Application class is the central point of the Fastpress framework.
+ * It handles service registration, dependency injection, routing, and request processing.
+ */
 class Application implements \ArrayAccess
 {
-    private array $config = [];
-    private array $container = [];
+    /** @var Config The configuration object for the application. */
+    private Config $config;
 
+    /** @var array Registered services and their resolvers. */
+    private array $services = [];
+
+    /** @var array Resolved service instances. */
+    private array $instances = [];
+
+    /** @var Database|null The database connection instance. */
+    private ?Database $database = null;
+
+    /**
+     * Constructor for the Application class.
+     *
+     * @param array $config The application configuration.
+     */
     public function __construct(array $config)
     {
-        $this->config = $config;
-        if (!empty($this->config['services']) && is_array($this->config['services'])) {
-            foreach ($this->config['services'] as $name => $resolver) {
-                $this->register($name, $resolver);
-            }
+        $this->config = new Config($config);
+        $this->registerDefaultServices();
+    }
+
+    /**
+     * Registers default services like 'config', 'pdo' (if database config exists),
+     * and any user-defined services from the configuration.
+     */
+    private function registerDefaultServices(): void
+    {
+        // Register the config service
+        $this->register('config', fn() => $this->config);
+
+        // Register the PDO service if database configuration is provided
+        if ($this->config->has('database:mysql')) {
+            $this->register('pdo', function() {
+                if ($this->database === null) {
+                    $this->database = new Database($this->config->get('database:mysql'));
+                }
+                return $this->database->getConnection();
+            });
+        }
+
+        // Register user-defined services
+        foreach ($this->config->get('services', []) as $name => $resolver) {
+            $this->register($name, $resolver);
         }
     }
 
     /**
-     * Registers a service in the application.
+     * Registers a service with the application.
      *
-     * @param string $name Name of the service.
-     * @param callable $resolver Service resolver function.
+     * @param string  $name     The name of the service.
+     * @param Closure $resolver A closure that resolves the service instance.
+     * @return self
      */
-    public function register(string $name, callable $resolver): void
+    public function register(string $name, Closure $resolver): self
     {
-        $this->container['services'][$name] = function () use ($resolver) {
-            static $service;
-            if (null === $service) {
-                $service = $resolver();
-            }
-            return $service;
-        };
+        $this->services[$name] = $resolver;
+        unset($this->instances[$name]);
+        return $this;
     }
 
     /**
-     * Defines a route that responds to GET HTTP method.
+     * Resolves a service instance by name.
      *
-     * @param string $path URI path for the route.
-     * @param mixed $resource Handler for the route.
+     * @param string $name The name of the service.
+     * @return mixed The resolved service instance.
+     * @throws RuntimeException If the service is not found.
      */
-    public function get(string $path, $resource): void
+    public function resolve(string $name): mixed
     {
-        $this->container['services']['router']()->get($path, $resource);
-    }
-
-    public function post(string $path, $resource): void
-    {
-        $this->container['services']['router']()->post($path, $resource);
-    }
-
-    public function any(string $path, $resource): void
-    {
-        $this->container['services']['router']()->any($path, $resource);
-    }
-
-    public function delete(string $path, $resource): void
-    {
-        $this->container['services']['router']()->delete($path, $resource);
-    }
-
-    public function set(string $key, $value): void
-    {
-        if (strpos($key, ':') !== false) {
-            list($container, $key) = explode(':', $key);
-            $this->config[$container][$key] = $value;
-            return;
+        if (!isset($this->services[$name])) {
+            throw new RuntimeException("Service '{$name}' not found");
         }
-
-        $this->container[$key] = $value;
+    
+        if (!isset($this->instances[$name])) {
+            $this->instances[$name] = ($this->services[$name])($this);
+        }
+    
+        return $this->instances[$name];
     }
 
-    public function offsetExists($offset): bool
+    /**
+     * Checks if a service is registered.
+     *
+     * @param string $name The name of the service.
+     * @return bool True if the service is registered, false otherwise.
+     */
+    public function has(string $name): bool
     {
-        $parts = explode(':', $offset);
-        if (count($parts) === 2) {
-            return isset($this->container[$parts[0]][$parts[1]]);
-        }
-
-        return isset($this->container[$offset]);
+        return isset($this->services[$name]);
     }
 
-    public function offsetGet($offset): mixed
+    /**
+     * Registers a GET route with the router.
+     *
+     * @param string $path    The path for the route.
+     * @param string $handler The route handler (Controller@method).
+     * @return self
+     */
+    public function get(string $path, string $handler): self
     {
-        $parts = explode(':', $offset);
-        if (count($parts) === 2) {
-            return $this->container[$parts[0]][$parts[1]] ?? null;
-        }
-
-        if (isset($this->container['services'][$offset])) {
-            return $this->container['services'][$offset]();
-        }
-
-        if ($this->config[$offset]) {
-            return $this->config[$offset];
-        }
-
-        return $this->container[$offset] ?? null;
+        /** @var \Fastpress\Routing\Router $router */
+        $router = $this->resolve('router');
+        
+        $router->get($path, $handler);
+        return $this;
     }
 
-    public function offsetSet($offset, $value): void
+    /**
+     * Registers a POST route with the router.
+     *
+     * @param string $path    The path for the route.
+     * @param string $handler The route handler (Controller@method).
+     * @return self
+     */
+    public function post(string $path, string $handler): self
     {
-        $parts = explode(':', $offset);
-        if (count($parts) === 2) {
-            $this->container[$parts[0]][$parts[1]] = $value;
-            return;
-        }
-
-        $this->container[$offset] = $value;
+        /** @var \Fastpress\Routing\Router $router */
+        $router = $this->resolve('router');
+        $router->post($path, $handler);
+        return $this;
     }
 
-    public function offsetUnset($offset): void
+    /**
+     * Registers a route that matches any HTTP method with the router.
+     *
+     * @param string $path    The path for the route.
+     * @param string $handler The route handler (Controller@method).
+     * @return self
+     */
+    public function any(string $path, string $handler): self
     {
-        $parts = explode(':', $offset);
-        if (count($parts) === 2) {
-            unset($this->container[$parts[0]][$parts[1]]);
-            return;
-        }
-
-        unset($this->container[$offset]);
+        /** @var \Fastpress\Routing\Router $router */
+        $router = $this->resolve('router');
+        $router->any($path, $handler);
+        return $this;
     }
 
+    /**
+     * Runs the application. This method handles the request processing flow.
+     */
     public function run(): void
     {
-        $input = $this->container['services']["request"]()->requestGlobals();
-        $result = $this->container['services']["router"]()->match(
-            $input["server"],
-            $input["post"]
-        );
+        try {
+            /** @var \Fastpress\Routing\Router $router */
+            $router = $this->resolve('router');
+            /** @var \Fastpress\Http\Request $request */
+            $request = $this->resolve('request');
+            
+            // Match the request to a route
+            $route = $router->match($_SERVER, $_POST);
 
-        if ($result === null) {
-            header("HTTP/1.0 404 Not Found");
-            die('Invalid route');
-        }
-
-        list($args, $resource) = $result;
-        list($controller, $method) = explode('@', $resource);
-
-        if (!$controller || !$method) {
-            // header("HTTP/1.0 404 Not Found");
-        }
-
-        $this->Container($controller, $method, $args);
-    }
-
-    public function Container($controller, $method, $args): void
-    {
-        $controllerInstance = $this->recursiveClassLoader($controller);
-        $reflection = new \ReflectionMethod($controllerInstance, $method);
-
-        $params = $reflection->getParameters();
-        $args = [];
-
-        foreach ($params as $param) {
-            $paramType = $param->getType();
-            $paramName = $param->getName();
-
-            if ($paramName === 'view') {
-                $args[] = new \Fastpress\Presentation\View($this);
-                continue;
-            } else {
-                $args[] = $this->container['services'][$paramName]();
+            if ($route === null) {
+                throw new RuntimeException('Route not found', 404);
             }
+
+            // Set URL parameters in the request object
+            $request->setUrlParams($route['params'] ?? []);
+
+            // Parse the route handler to get the controller and method
+            [$controller, $method] = $this->parseHandler($route['handler']);
+            
+            // Resolve the controller instance and execute the action
+            $instance = $this->resolveController($controller);
+            $this->executeAction($instance, $method, $route['params'] ?? []);
+
+        } catch (RuntimeException $e) {
+            $this->handleError($e);
+        }
+    }
+    
+    /**
+     * Parses the route handler string to extract the controller and method.
+     *
+     * @param string $handler The route handler string (Controller@method).
+     * @return array An array containing the controller class and method name.
+     * @throws RuntimeException If the handler format is invalid.
+     */
+    private function parseHandler(string $handler): array
+    {
+        if (!str_contains($handler, '@')) {
+            throw new RuntimeException("Invalid handler format: {$handler}");
         }
 
-        call_user_func_array([$controllerInstance, $method], $args);
+        [$controller, $method] = explode('@', $handler, 2);
+        
+        if (empty($controller) || empty($method)) {
+            throw new RuntimeException("Invalid handler format: {$handler}");
+        }
+
+        return [$controller, $method];
     }
 
-    public function recursiveClassLoader($className)
+    /**
+     * Resolves the controller instance.
+     *
+     * @param string $controller The controller class name.
+     * @return object The controller instance.
+     * @throws RuntimeException If the controller cannot be resolved.
+     */
+    private function resolveController(string $controller): object
     {
-        if (strpos($className, 'Controller') !== false) {
-            $className = $this->config['namespaces']['controller'] . $className;
+
+        if (str_contains($controller, 'Controller')) {
+            $controller = $this->config->get('namespaces:controller') . $controller;
         }
 
-        $parts = explode('\\', $className);
-        $shortClassName = strtolower(end($parts));
+        try {
+            $reflection = new ReflectionClass($controller);
+            
+            if (!$reflection->isInstantiable()) {
+                throw new RuntimeException("Controller {$controller} is not instantiable");
+            }
 
-        if (isset($this->config['services'][$shortClassName])) {
-            return $this->config['services'][$shortClassName]($this);
+            $constructor = $reflection->getConstructor();
+            
+            if (!$constructor) {
+                return $reflection->newInstance();
+            }
+
+            // Resolve constructor dependencies
+            $dependencies = $this->resolveDependencies($constructor->getParameters());
+            return $reflection->newInstanceArgs($dependencies);
+
+        } catch (\ReflectionException $e) {
+            throw new RuntimeException("Failed to resolve controller: {$controller}", 0, $e);
         }
-        $reflection = new \ReflectionClass($className);
-        $constructor = $reflection->getConstructor();
+    }
 
-        if (!$constructor) {
-            return $reflection->newInstance();
+    /**
+     * Executes the controller action.
+     *
+     * @param object $controller The controller instance.
+     * @param string $method     The method name.
+     * @param array  $params     Route parameters.
+     * @throws RuntimeException If the action cannot be executed.
+     */
+    private function executeAction(object $controller, string $method, array $params = []): void
+    {
+        try {
+            $reflection = new ReflectionMethod($controller, $method);
+            $dependencies = $this->resolveDependencies($reflection->getParameters());
+            
+            // Create a data object instead of passing the Application
+            $globalViewData = [
+                'config' => $this->config->all(),
+                'params' => $params,
+                'site' => $this->config->all()['site'] ?? []  // Direct access to site config
+            ];
+            
+            // Share global view data with the view service
+            if ($this->has('view')) {
+                $view = $this->resolve('view');
+                $view->share('app', $globalViewData);
+            }
+
+            $reflection->invokeArgs($controller, $dependencies);
+
+        } catch (\ReflectionException $e) {
+            throw new RuntimeException("Failed to execute controller action", 0, $e);
         }
+    }
 
-        $params = $constructor->getParameters();
+    
+    /**
+     * Resolves dependencies for a method or constructor.
+     *
+     * @param array $parameters An array of ReflectionParameter objects.
+     * @return array An array of resolved dependencies.
+     */
+    private function resolveDependencies(array $parameters): array
+    {
         $dependencies = [];
 
-        foreach ($params as $param) {
-            $paramType = $param->getType();
-            if ($paramType->getName() === 'PDO') {
-                $dependencies[] = new \PDO(
-                    $this->createPdoDsn($this->config['database']['mysql']),
-                    $this->config['database']['mysql']['username'],
-                    $this->config['database']['mysql']['password'],
-                    [
-                        \PDO::ATTR_EMULATE_PREPARES => false,
-                        \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-                    ]
-                );
-                continue;
-            }
-
-            if (!$paramType->isBuiltin()) {
-                $dependencies[] = $this->recursiveClassLoader($paramType->getName());
+        foreach ($parameters as $parameter) {
+            $dependency = $this->resolveDependency($parameter);
+            if ($dependency !== null) {
+                $dependencies[] = $dependency;
             }
         }
 
-        return $reflection->newInstanceArgs($dependencies);
+        return $dependencies;
     }
 
-    public function createPdoDsn($dbConfig)
+    /**
+     * Returns the complete application configuration.
+     *
+     * @return array The application configuration.
+     */
+    public function config(): array
     {
-        if ($dbConfig['driver'] == 'mysql') {
-            return "mysql:host={$dbConfig['host']};port={$dbConfig['port']};dbname={$dbConfig['database']};charset={$dbConfig['charset']}";
+        return $this->config->all();
+    }
+
+    /**
+     * Resolves a single dependency.
+     *
+     * @param ReflectionParameter $parameter The parameter to resolve.
+     * @return mixed The resolved dependency.
+     * @throws RuntimeException If the dependency cannot be resolved.
+     */
+    private function resolveDependency(ReflectionParameter $parameter): mixed
+    {
+        $type = $parameter->getType();
+        
+        if (!$type || $type->isBuiltin()) {
+            if ($parameter->isDefaultValueAvailable()) {
+                return $parameter->getDefaultValue();
+            }
+            throw new RuntimeException("Cannot resolve parameter: {$parameter->getName()}");
         }
 
-        return null;
+        $className = $type->getName();
+        $serviceName = strtolower(basename(str_replace('\\', '/', $className)));
+
+        if ($this->has($serviceName)) {
+            return $this->resolve($serviceName);
+        }
+
+        try {
+            $reflection = new ReflectionClass($className);
+            $constructor = $reflection->getConstructor();
+            
+            if (!$constructor) {
+                return $reflection->newInstance();
+            }
+
+            // Recursively resolve dependencies for the constructor
+            $dependencies = $this->resolveDependencies($constructor->getParameters());
+            return $reflection->newInstanceArgs($dependencies);
+
+        } catch (\ReflectionException $e) {
+            throw new RuntimeException("Cannot autowire {$className}", 0, $e);
+        }
+    }
+
+    /**
+     * Handles errors and exceptions.
+     *
+     * @param \Throwable $e The exception to handle.
+     */
+    private function handleError(\Throwable $e): void
+    {
+        /** @var \Fastpress\Http\Response $response */
+        $response = $this->resolve('response');
+
+        if ($e->getCode() === 404) {
+            // Redirect to a custom error page for 404 errors
+            $response->redirect('/error', 404);
+        } else {
+            //  Set a 500 error code and display a generic error message
+            $response->setCode(500);
+            $response->setBody('Server Error');
+            $response->render();
+        }
+    }
+
+    /**
+     * Sets a configuration value.
+     *
+     * @param string $key   The configuration key.
+     * @param mixed  $value The configuration value.
+     * @return self
+     */
+    public function set(string $key, mixed $value): self
+    {
+        $this->config->set($key, $value);
+        return $this;
+    }
+    
+
+    /**
+     * Checks if a configuration key exists.
+     * This method allows the Application object to be used as an array for accessing configuration.
+     *
+     * @param mixed $offset The configuration key.
+     * @return bool True if the key exists, false otherwise.
+     */
+    public function offsetExists($offset): bool
+    {
+        return isset($this->config->all()[$offset]);
+    }
+
+    /**
+     * Gets a configuration value.
+     * This method allows the Application object to be used as an array for accessing configuration.
+     *
+     * @param mixed $offset The configuration key.
+     * @return mixed The configuration value.
+     */
+    public function offsetGet($offset): mixed
+    {
+        return $this->config->all()[$offset] ?? null;
+    }
+
+    /**
+     * Sets a configuration value.
+     * This method allows the Application object to be used as an array for accessing configuration.
+     *
+     * @param mixed $offset The configuration key.
+     * @param mixed $value  The configuration value.
+     */
+    public function offsetSet($offset, $value): void
+    {
+        $this->config->set($offset, $value);
+    }
+
+    /**
+     * Unsets a configuration value.
+     * This method allows the Application object to be used as an array for accessing configuration.
+     *
+     * @param mixed $offset The configuration key.
+     */
+    public function offsetUnset($offset): void
+    {
+        // Optional: implement if needed
+    }
+
+    /**
+     * Gets a configuration value using dot notation.
+     *
+     * @param string|null $path The configuration path (e.g., 'database.mysql.host').
+     * @return mixed The configuration value.
+     */
+    public function getConfig(string $path = null): mixed 
+    {
+        if ($path === null) {
+            return $this->config->all();
+        }
+
+        $parts = explode('.', $path);
+        $data = $this->config->all();
+
+        foreach ($parts as $part) {
+            if (!isset($data[$part])) {
+                return null;
+            }
+            $data = $data[$part];
+        }
+
+        return $data;
     }
 }
