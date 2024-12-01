@@ -17,7 +17,7 @@ use ReflectionParameter;
 class Application implements \ArrayAccess
 {
     /** @var Config The configuration object for the application. */
-    private Config $config;
+    private array $config;
 
     /** @var array Registered services and their resolvers. */
     private array $services = [];
@@ -35,9 +35,10 @@ class Application implements \ArrayAccess
      */
     public function __construct(array $config)
     {
-        $this->config = new Config($config);
+        $this->config = $config;  // Store config array directly
         $this->registerDefaultServices();
     }
+
 
     /**
      * Registers default services like 'config', 'pdo' (if database config exists),
@@ -48,19 +49,21 @@ class Application implements \ArrayAccess
         // Register the config service
         $this->register('config', fn() => $this->config);
 
-        // Register the PDO service if database configuration is provided
-        if ($this->config->has('database:mysql')) {
+        // Register the PDO service if database configuration exists
+        if (isset($this->config['database']['mysql'])) {
             $this->register('pdo', function() {
                 if ($this->database === null) {
-                    $this->database = new Database($this->config->get('database:mysql'));
+                    $this->database = new Database($this->config['database']['mysql']);
                 }
                 return $this->database->getConnection();
             });
         }
 
         // Register user-defined services
-        foreach ($this->config->get('services', []) as $name => $resolver) {
-            $this->register($name, $resolver);
+        if (isset($this->config['services'])) {
+            foreach ($this->config['services'] as $name => $resolver) {
+                $this->register($name, $resolver);
+            }
         }
     }
 
@@ -219,9 +222,9 @@ class Application implements \ArrayAccess
      */
     private function resolveController(string $controller): object
     {
-
         if (str_contains($controller, 'Controller')) {
-            $controller = $this->config->get('namespaces:controller') . $controller;
+            $namespace = $this->config['namespaces']['controller'] ?? '';
+            $controller = $namespace . $controller;
         }
 
         try {
@@ -262,9 +265,9 @@ class Application implements \ArrayAccess
             
             // Create a data object instead of passing the Application
             $globalViewData = [
-                'config' => $this->config->all(),
+                'config' => $this->config,
                 'params' => $params,
-                'site' => $this->config->all()['site'] ?? []  // Direct access to site config
+                'site' => $this->config['site'] ?? []  // Direct access to site config
             ];
             
             // Share global view data with the view service
@@ -308,7 +311,7 @@ class Application implements \ArrayAccess
      */
     public function config(): array
     {
-        return $this->config->all();
+        return $this->config;  // Just return the array directly
     }
 
     /**
@@ -383,7 +386,15 @@ class Application implements \ArrayAccess
      */
     public function set(string $key, mixed $value): self
     {
-        $this->config->set($key, $value);
+        if (str_contains($key, ':')) {
+            [$section, $subKey] = explode(':', $key, 2);
+            $this->config[$section] = array_merge(
+                $this->config[$section] ?? [],
+                [$subKey => $value]
+            );
+        } else {
+            $this->config[$key] = $value;
+        }
         return $this;
     }
     
@@ -397,7 +408,7 @@ class Application implements \ArrayAccess
      */
     public function offsetExists($offset): bool
     {
-        return isset($this->config->all()[$offset]);
+        return isset($this->config[$offset]);
     }
 
     /**
@@ -409,7 +420,7 @@ class Application implements \ArrayAccess
      */
     public function offsetGet($offset): mixed
     {
-        return $this->config->all()[$offset] ?? null;
+        return $this->config[$offset] ?? null;
     }
 
     /**
@@ -444,11 +455,11 @@ class Application implements \ArrayAccess
     public function getConfig(string $path = null): mixed 
     {
         if ($path === null) {
-            return $this->config->all();
+            return $this->config;
         }
 
         $parts = explode('.', $path);
-        $data = $this->config->all();
+        $data = $this->config;
 
         foreach ($parts as $part) {
             if (!isset($data[$part])) {

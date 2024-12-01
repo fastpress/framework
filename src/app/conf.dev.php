@@ -77,35 +77,25 @@ $conf['session'] = [
 
 // define your services like router, request, response, session, view, etc.
 $conf['services'] = [
-    'router' => function() {
-        return new Fastpress\Routing\Router();
-    },
-    'request' => function() {
-        return new Fastpress\Http\Request();
-    },
-    'response' => function() {
-        return new Fastpress\Http\Response();
-    },
-    'session' => function() use ($conf) {
-        return new Fastpress\Security\Session($_SESSION, $conf['session']);
-    },
-    'view' => function() use ($conf) {
-       return new Fastpress\Presentation\View($conf);
-    },
- 
-    'pdo' => function() use ($conf) {
-       return new \PDO(
-          "mysql:host=localhost;dbname=db;charset=utf8",
-          "root",
-          "",
-          [
-             PDO::ATTR_EMULATE_PREPARES => false,
-             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-          ]
-       );
-   },
-    // Add other services as needed
- ];
+  'router' => function() {
+      return new Fastpress\Routing\Router();
+  },
+  'request' => function() {
+      return new Fastpress\Http\Request($_GET, $_POST, $_SERVER, $_COOKIE);
+  },
+  'response' => function() {
+      return new Fastpress\Http\Response();
+  },
+  'session' => function() {
+      return new Fastpress\Security\Session();
+  },
+  'view' => function($container) {  
+      return new Fastpress\Presentation\View(
+          $container, 
+          $container->resolve('session')
+      );
+  },
+];
 
 // Define other configurations such as cache settings, blocks, use flags, etc.
 $conf['block'] = [
