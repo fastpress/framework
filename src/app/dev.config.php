@@ -82,8 +82,10 @@ $conf['services'] = [
   'response' => function() {
       return new Fastpress\Http\Response();
   },
-  'session' => function() {
-      return new Fastpress\Security\Session();
+  'session' => function($container) {
+      return new Fastpress\Security\Session(
+          $container->getConfig('session') ?? []
+      );
   },
   'view' => function($container) {
       return new Fastpress\Presentation\View(

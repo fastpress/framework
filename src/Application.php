@@ -201,6 +201,15 @@ class Application implements \ArrayAccess
             /** @var \Fastpress\Http\Request $request */
             $request = $this->resolve('request');
 
+            // Handle CORS preflight OPTIONS requests
+            $requestMethod = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+            if ($requestMethod === 'OPTIONS') {
+                /** @var \Fastpress\Http\Response $response */
+                $response = $this->resolve('response');
+                $response->setStatusCode(204)->send();
+                return;
+            }
+
             // Match the request to a route
             $route = $router->match($_SERVER, $_POST);
 
@@ -354,7 +363,7 @@ class Application implements \ArrayAccess
     {
         try {
             $reflection = new ReflectionMethod($controller, $method);
-            $dependencies = $this->resolveDependencies($reflection->getParameters());
+            $dependencies = $this->resolveDependencies($reflection->getParameters(), $params);
 
             // Share global view data with the view service
             if ($this->has('view')) {
@@ -379,12 +388,12 @@ class Application implements \ArrayAccess
      * @param array $parameters An array of ReflectionParameter objects.
      * @return array An array of resolved dependencies.
      */
-    private function resolveDependencies(array $parameters): array
+    private function resolveDependencies(array $parameters, array $routeParams = []): array
     {
         $dependencies = [];
 
         foreach ($parameters as $parameter) {
-            $dependency = $this->resolveDependency($parameter);
+            $dependency = $this->resolveDependency($parameter, $routeParams);
             if ($dependency !== null) {
                 $dependencies[] = $dependency;
             }
@@ -410,15 +419,20 @@ class Application implements \ArrayAccess
      * @return mixed The resolved dependency.
      * @throws RuntimeException If the dependency cannot be resolved.
      */
-    private function resolveDependency(ReflectionParameter $parameter): mixed
+    private function resolveDependency(ReflectionParameter $parameter, array $routeParams = []): mixed
     {
         $type = $parameter->getType();
+        $paramName = $parameter->getName();
 
         if (!$type || $type->isBuiltin()) {
+            // Check if this parameter matches a route parameter by name
+            if (array_key_exists($paramName, $routeParams)) {
+                return $routeParams[$paramName];
+            }
             if ($parameter->isDefaultValueAvailable()) {
                 return $parameter->getDefaultValue();
             }
-            throw new RuntimeException("Cannot resolve parameter: {$parameter->getName()}");
+            throw new RuntimeException("Cannot resolve parameter: {$paramName}");
         }
 
         $className = $type->getName();
