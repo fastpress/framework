@@ -4,12 +4,12 @@
     "type": "library",
     "require": {
         "php": "^8.0",
-        "fastpress/request": "^0.1",
-        "fastpress/response": "^0.1",
-        "fastpress/router": "^0.1",
-        "fastpress/session": "^0.1",
-        "fastpress/view": "^0.1",
-        "fastpress/database": "^0.1"
+        "fastpress/request": "^0.2",
+        "fastpress/response": "^0.2",
+        "fastpress/router": "^0.2",
+        "fastpress/session": "^0.2",
+        "fastpress/view": "^0.2",
+        "fastpress/database": "^0.2"
     },
     "scripts": {
         "test": "phpunit",
