@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Fastpress;
 
+use Fastpress\Memory\Database;
 use RuntimeException;
 use Closure;
 use ReflectionClass;
@@ -16,7 +17,7 @@ use ReflectionParameter;
  */
 class Application implements \ArrayAccess
 {
-    /** @var Config The configuration object for the application. */
+    /** @var array The application configuration. */
     private array $config;
 
     /** @var array Registered services and their resolvers. */
@@ -35,10 +36,9 @@ class Application implements \ArrayAccess
      */
     public function __construct(array $config)
     {
-        $this->config = $config;  // Store config array directly
+        $this->config = $config;
         $this->registerDefaultServices();
     }
-
 
     /**
      * Registers default services like 'config', 'pdo' (if database config exists),
@@ -51,7 +51,7 @@ class Application implements \ArrayAccess
 
         // Register the PDO service if database configuration exists
         if (isset($this->config['database']['mysql'])) {
-            $this->register('pdo', function() {
+            $this->register('pdo', function () {
                 if ($this->database === null) {
                     $this->database = new Database($this->config['database']['mysql']);
                 }
@@ -93,11 +93,11 @@ class Application implements \ArrayAccess
         if (!isset($this->services[$name])) {
             throw new RuntimeException("Service '{$name}' not found");
         }
-    
+
         if (!isset($this->instances[$name])) {
             $this->instances[$name] = ($this->services[$name])($this);
         }
-    
+
         return $this->instances[$name];
     }
 
@@ -121,10 +121,7 @@ class Application implements \ArrayAccess
      */
     public function get(string $path, string $handler): self
     {
-        /** @var \Fastpress\Routing\Router $router */
-        $router = $this->resolve('router');
-        
-        $router->get($path, $handler);
+        $this->resolve('router')->get($path, $handler);
         return $this;
     }
 
@@ -137,9 +134,46 @@ class Application implements \ArrayAccess
      */
     public function post(string $path, string $handler): self
     {
-        /** @var \Fastpress\Routing\Router $router */
-        $router = $this->resolve('router');
-        $router->post($path, $handler);
+        $this->resolve('router')->post($path, $handler);
+        return $this;
+    }
+
+    /**
+     * Registers a PUT route with the router.
+     *
+     * @param string $path    The path for the route.
+     * @param string $handler The route handler (Controller@method).
+     * @return self
+     */
+    public function put(string $path, string $handler): self
+    {
+        $this->resolve('router')->put($path, $handler);
+        return $this;
+    }
+
+    /**
+     * Registers a DELETE route with the router.
+     *
+     * @param string $path    The path for the route.
+     * @param string $handler The route handler (Controller@method).
+     * @return self
+     */
+    public function delete(string $path, string $handler): self
+    {
+        $this->resolve('router')->delete($path, $handler);
+        return $this;
+    }
+
+    /**
+     * Registers a PATCH route with the router.
+     *
+     * @param string $path    The path for the route.
+     * @param string $handler The route handler (Controller@method).
+     * @return self
+     */
+    public function patch(string $path, string $handler): self
+    {
+        $this->resolve('router')->addRoute('PATCH', $path, $handler);
         return $this;
     }
 
@@ -152,9 +186,7 @@ class Application implements \ArrayAccess
      */
     public function any(string $path, string $handler): self
     {
-        /** @var \Fastpress\Routing\Router $router */
-        $router = $this->resolve('router');
-        $router->any($path, $handler);
+        $this->resolve('router')->any($path, $handler);
         return $this;
     }
 
@@ -168,7 +200,7 @@ class Application implements \ArrayAccess
             $router = $this->resolve('router');
             /** @var \Fastpress\Http\Request $request */
             $request = $this->resolve('request');
-            
+
             // Match the request to a route
             $route = $router->match($_SERVER, $_POST);
 
@@ -181,7 +213,7 @@ class Application implements \ArrayAccess
 
             // Parse the route handler to get the controller and method
             [$controller, $method] = $this->parseHandler($route['handler']);
-            
+
             // Resolve the controller instance and execute the action
             $instance = $this->resolveController($controller);
             $this->executeAction($instance, $method, $route['params'] ?? []);
@@ -190,7 +222,7 @@ class Application implements \ArrayAccess
             $this->handleError($e);
         }
     }
-    
+
     /**
      * Parses the route handler string to extract the controller and method.
      *
@@ -205,7 +237,7 @@ class Application implements \ArrayAccess
         }
 
         [$controller, $method] = explode('@', $handler, 2);
-        
+
         if (empty($controller) || empty($method)) {
             throw new RuntimeException("Invalid handler format: {$handler}");
         }
@@ -229,13 +261,13 @@ class Application implements \ArrayAccess
 
         try {
             $reflection = new ReflectionClass($controller);
-            
+
             if (!$reflection->isInstantiable()) {
                 throw new RuntimeException("Controller {$controller} is not instantiable");
             }
 
             $constructor = $reflection->getConstructor();
-            
+
             if (!$constructor) {
                 return $reflection->newInstance();
             }
@@ -262,18 +294,15 @@ class Application implements \ArrayAccess
         try {
             $reflection = new ReflectionMethod($controller, $method);
             $dependencies = $this->resolveDependencies($reflection->getParameters());
-            
-            // Create a data object instead of passing the Application
-            $globalViewData = [
-                'config' => $this->config,
-                'params' => $params,
-                'site' => $this->config['site'] ?? []  // Direct access to site config
-            ];
-            
+
             // Share global view data with the view service
             if ($this->has('view')) {
                 $view = $this->resolve('view');
-                $view->share('app', $globalViewData);
+                $view->share('app', [
+                    'config' => $this->config,
+                    'params' => $params,
+                    'site' => $this->config['site'] ?? [],
+                ]);
             }
 
             $reflection->invokeArgs($controller, $dependencies);
@@ -283,7 +312,6 @@ class Application implements \ArrayAccess
         }
     }
 
-    
     /**
      * Resolves dependencies for a method or constructor.
      *
@@ -311,7 +339,7 @@ class Application implements \ArrayAccess
      */
     public function config(): array
     {
-        return $this->config;  // Just return the array directly
+        return $this->config;
     }
 
     /**
@@ -324,7 +352,7 @@ class Application implements \ArrayAccess
     private function resolveDependency(ReflectionParameter $parameter): mixed
     {
         $type = $parameter->getType();
-        
+
         if (!$type || $type->isBuiltin()) {
             if ($parameter->isDefaultValueAvailable()) {
                 return $parameter->getDefaultValue();
@@ -333,26 +361,36 @@ class Application implements \ArrayAccess
         }
 
         $className = $type->getName();
-        $serviceName = strtolower(basename(str_replace('\\', '/', $className)));
+        $serviceName = lcfirst(basename(str_replace('\\', '/', $className)));
 
         if ($this->has($serviceName)) {
             return $this->resolve($serviceName);
         }
 
+        // Prevent circular dependencies
+        static $resolvingStack = [];
+        if (in_array($className, $resolvingStack)) {
+            throw new RuntimeException("Circular dependency detected for {$className}");
+        }
+        $resolvingStack[] = $className;
+
         try {
             $reflection = new ReflectionClass($className);
             $constructor = $reflection->getConstructor();
-            
+
             if (!$constructor) {
+                array_pop($resolvingStack);
                 return $reflection->newInstance();
             }
 
             // Recursively resolve dependencies for the constructor
             $dependencies = $this->resolveDependencies($constructor->getParameters());
+            array_pop($resolvingStack);
             return $reflection->newInstanceArgs($dependencies);
 
         } catch (\ReflectionException $e) {
-            throw new RuntimeException("Cannot autowire {$className}", 0, $e);
+            array_pop($resolvingStack);
+            throw new RuntimeException("Cannot autowire {$className}: " . $e->getMessage());
         }
     }
 
@@ -367,20 +405,20 @@ class Application implements \ArrayAccess
         $response = $this->resolve('response');
 
         if ($e->getCode() === 404) {
-            // Redirect to a custom error page for 404 errors
-            $response->redirect('/error', 404);
+            $response->setStatusCode(404)
+                ->setContent('Not Found')
+                ->send();
         } else {
-            //  Set a 500 error code and display a generic error message
-            $response->setCode(500);
-            $response->setBody('Server Error');
-            $response->render();
+            $response->setStatusCode(500)
+                ->setContent('Server Error')
+                ->send();
         }
     }
 
     /**
      * Sets a configuration value.
      *
-     * @param string $key   The configuration key.
+     * @param string $key   The configuration key (supports 'section:key' notation).
      * @param mixed  $value The configuration value.
      * @return self
      */
@@ -397,11 +435,9 @@ class Application implements \ArrayAccess
         }
         return $this;
     }
-    
 
     /**
      * Checks if a configuration key exists.
-     * This method allows the Application object to be used as an array for accessing configuration.
      *
      * @param mixed $offset The configuration key.
      * @return bool True if the key exists, false otherwise.
@@ -413,7 +449,6 @@ class Application implements \ArrayAccess
 
     /**
      * Gets a configuration value.
-     * This method allows the Application object to be used as an array for accessing configuration.
      *
      * @param mixed $offset The configuration key.
      * @return mixed The configuration value.
@@ -425,25 +460,23 @@ class Application implements \ArrayAccess
 
     /**
      * Sets a configuration value.
-     * This method allows the Application object to be used as an array for accessing configuration.
      *
      * @param mixed $offset The configuration key.
      * @param mixed $value  The configuration value.
      */
     public function offsetSet($offset, $value): void
     {
-        $this->config->set($offset, $value);
+        $this->config[$offset] = $value;
     }
 
     /**
      * Unsets a configuration value.
-     * This method allows the Application object to be used as an array for accessing configuration.
      *
      * @param mixed $offset The configuration key.
      */
     public function offsetUnset($offset): void
     {
-        // Optional: implement if needed
+        unset($this->config[$offset]);
     }
 
     /**
@@ -452,7 +485,7 @@ class Application implements \ArrayAccess
      * @param string|null $path The configuration path (e.g., 'database.mysql.host').
      * @return mixed The configuration value.
      */
-    public function getConfig(string $path = null): mixed 
+    public function getConfig(string $path = null): mixed
     {
         if ($path === null) {
             return $this->config;
