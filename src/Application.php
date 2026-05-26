@@ -173,7 +173,7 @@ class Application implements \ArrayAccess
      */
     public function patch(string $path, string $handler): self
     {
-        $this->resolve('router')->addRoute('PATCH', $path, $handler);
+        $this->resolve('router')->patch($path, $handler);
         return $this;
     }
 
@@ -214,13 +214,74 @@ class Application implements \ArrayAccess
             // Parse the route handler to get the controller and method
             [$controller, $method] = $this->parseHandler($route['handler']);
 
-            // Resolve the controller instance and execute the action
+            // Resolve the controller instance
             $instance = $this->resolveController($controller);
-            $this->executeAction($instance, $method, $route['params'] ?? []);
+
+            // Build the controller action as a callable
+            $action = function () use ($instance, $method, $route) {
+                $this->executeAction($instance, $method, $route['params'] ?? []);
+            };
+
+            // Run middleware pipeline, then execute action
+            $this->runMiddleware($route['middleware'] ?? [], $action);
 
         } catch (RuntimeException $e) {
             $this->handleError($e);
         }
+    }
+
+    /**
+     * Runs the middleware pipeline.
+     *
+     * Middleware can be a class name with a handle(Request, Response, Closure $next) method,
+     * or a callable with the same signature.
+     *
+     * @param array    $middleware The middleware stack.
+     * @param callable $action    The final action to execute after all middleware.
+     */
+    private function runMiddleware(array $middleware, callable $action): void
+    {
+        if (empty($middleware)) {
+            $action();
+            return;
+        }
+
+        $request = $this->resolve('request');
+        $response = $this->resolve('response');
+
+        $current = array_shift($middleware);
+        $next = function () use ($middleware, $action) {
+            $this->runMiddleware($middleware, $action);
+        };
+
+        if (is_callable($current)) {
+            $current($request, $response, $next);
+        } elseif (is_string($current) && class_exists($current)) {
+            $instance = $this->resolveClass($current);
+            $instance->handle($request, $response, $next);
+        } else {
+            // Unknown middleware, skip and continue
+            $next();
+        }
+    }
+
+    /**
+     * Resolves a class by autowiring its constructor dependencies.
+     *
+     * @param string $className The fully qualified class name.
+     * @return object The resolved instance.
+     */
+    private function resolveClass(string $className): object
+    {
+        $reflection = new ReflectionClass($className);
+        $constructor = $reflection->getConstructor();
+
+        if (!$constructor) {
+            return $reflection->newInstance();
+        }
+
+        $dependencies = $this->resolveDependencies($constructor->getParameters());
+        return $reflection->newInstanceArgs($dependencies);
     }
 
     /**
@@ -401,18 +462,35 @@ class Application implements \ArrayAccess
      */
     private function handleError(\Throwable $e): void
     {
+        $code = $e->getCode();
+        $statusCode = in_array($code, [400, 401, 403, 404, 405, 500, 503]) ? $code : 500;
+
+        // Try to render an error view if the view service is available
+        if ($this->has('view')) {
+            try {
+                $view = $this->resolve('view');
+                $viewsPath = $this->config['template']['views'] ?? '';
+                $errorView = $viewsPath . '/errors/' . $statusCode . '.php';
+
+                if (file_exists($errorView)) {
+                    http_response_code($statusCode);
+                    $view->render('errors/' . $statusCode . '.php', [
+                        'code' => $statusCode,
+                        'message' => $e->getMessage(),
+                    ]);
+                    return;
+                }
+            } catch (\Throwable $viewError) {
+                // View rendering failed, fall through to plain text
+            }
+        }
+
+        // Fallback: plain text response
         /** @var \Fastpress\Http\Response $response */
         $response = $this->resolve('response');
-
-        if ($e->getCode() === 404) {
-            $response->setStatusCode(404)
-                ->setContent('Not Found')
-                ->send();
-        } else {
-            $response->setStatusCode(500)
-                ->setContent('Server Error')
-                ->send();
-        }
+        $response->setStatusCode($statusCode)
+            ->setContent($statusCode === 404 ? 'Not Found' : 'Server Error')
+            ->send();
     }
 
     /**
