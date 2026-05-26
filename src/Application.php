@@ -14,6 +14,8 @@ use ReflectionParameter;
 /**
  * The Application class is the central point of the Fastpress framework.
  * It handles service registration, dependency injection, routing, and request processing.
+ *
+ * @implements \ArrayAccess<string, mixed>
  */
 class Application implements \ArrayAccess
 {
@@ -424,7 +426,7 @@ class Application implements \ArrayAccess
         $type = $parameter->getType();
         $paramName = $parameter->getName();
 
-        if (!$type || $type->isBuiltin()) {
+        if (!$type instanceof \ReflectionNamedType || $type->isBuiltin()) {
             // Check if this parameter matches a route parameter by name
             if (array_key_exists($paramName, $routeParams)) {
                 return $routeParams[$paramName];
@@ -476,7 +478,7 @@ class Application implements \ArrayAccess
      */
     private function handleError(\Throwable $e): void
     {
-        $code = $e->getCode();
+        $code = (int) $e->getCode();
         $statusCode = in_array($code, [400, 401, 403, 404, 405, 500, 503]) ? $code : 500;
 
         // Try to render an error view if the view service is available
